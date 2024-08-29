@@ -3,9 +3,10 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import './EventCalendar.css';
 import EventShowcase from './EventShowcase';
+import EventDetailsModal from './EventDetailsModal';
 
 // API URL
-const API_URL = 'https://caaaddd67da845d73791.free.beeceptor.com/api/calendar/events/';
+const API_URL = 'https://ca3c3b841ea75daa1fa7.free.beeceptor.com/api/calender/events/';
 
 const generateDaysInMonth = (year, month) => {
   return new Date(year, month + 1, 0).getDate();
@@ -22,6 +23,9 @@ const EventCalendar = () => {
   const [eventInput, setEventInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [filter, setFilter] = useState('All');
+  const [editingEvent, setEditingEvent] = useState(null);
 
   const selectedYear = selectedDate.getFullYear();
   const selectedMonth = selectedDate.getMonth();
@@ -67,7 +71,8 @@ const EventCalendar = () => {
           },
           body: JSON.stringify({
             date: dateKey,
-            event: eventInput.trim()
+            event: eventInput.trim(),
+            category: 'Work' // Example category
           })
         });
 
@@ -107,6 +112,47 @@ const EventCalendar = () => {
     }
   };
 
+  const editEvent = async (event) => {
+    setEditingEvent(event);
+    setEventInput(event.event); // Pre-fill the input with the existing event details
+  };
+
+  const saveEditedEvent = async () => {
+    if (editingEvent && eventInput.trim()) {
+      const dateKey = editingEvent.date;
+      try {
+        const response = await fetch(`${API_URL}/${editingEvent.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            ...editingEvent,
+            event: eventInput.trim()
+          })
+        });
+
+        if (!response.ok) throw new Error('Failed to edit event');
+
+        const updatedEvent = await response.json();
+        setEvents(prevEvents => ({
+          ...prevEvents,
+          [dateKey]: prevEvents[dateKey].map(evt => evt.id === updatedEvent.id ? updatedEvent : evt),
+        }));
+        setEditingEvent(null);
+        setEventInput('');
+      } catch (error) {
+        setError('Error editing event');
+        console.error('Error editing event:', error);
+      }
+    }
+  };
+
+  const filterEvents = (events, filter) => {
+    if (filter === 'All') return events;
+    return events.filter(event => event.category === filter);
+  };
+
   return (
     <div className="calendar-container">
       <div className="calendar-header">
@@ -118,6 +164,13 @@ const EventCalendar = () => {
         <button className="nav-button" onClick={() => setSelectedDate(new Date(selectedYear, selectedMonth - 1))}>←</button>
         <h2 className="calendar-month">{months[selectedMonth]}</h2>
         <button className="nav-button" onClick={() => setSelectedDate(new Date(selectedYear, selectedMonth + 1))}>→</button>
+      </div>
+      <div>
+        <select onChange={(e) => setFilter(e.target.value)}>
+          <option value="All">All Categories</option>
+          <option value="Work">Work</option>
+          <option value="Personal">Personal</option>
+        </select>
       </div>
       <div className="calendar-grid">
         {[...Array(daysInMonth).keys()].map((i) => {
@@ -131,10 +184,11 @@ const EventCalendar = () => {
             >
               <div className="day-number">{day}</div>
               <div className="events-list">
-                {(events[dateKey] || []).map((event) => (
+                {filterEvents(events[dateKey] || [], filter).map((event) => (
                   <div key={event.id} className="event-item">
-                    {event.event}
+                    <span onClick={() => setSelectedEvent(event)}>{event.event}</span>
                     <button className="delete-button" onClick={() => deleteEvent(dateKey, event.id)}>✖️</button>
+                    <button className="edit-button" onClick={() => editEvent(event)}>✏️</button>
                   </div>
                 ))}
               </div>
@@ -144,7 +198,7 @@ const EventCalendar = () => {
       </div>
 
       <div className="event-addition">
-        <h2>Add Event</h2>
+        <h2>{editingEvent ? 'Edit Event' : 'Add Event'}</h2>
         <DatePicker
           selected={selectedDate}
           onChange={date => setSelectedDate(date)}
@@ -158,11 +212,22 @@ const EventCalendar = () => {
           placeholder="Enter event"
           className="event-input"
         />
-        <button onClick={addEvent} className="add-button">Add Event</button>
+        {editingEvent ? (
+          <button onClick={saveEditedEvent} className="save-button">Save Changes</button>
+        ) : (
+          <button onClick={addEvent} className="add-button">Add Event</button>
+        )}
         {error && <p className="error-message">{error}</p>}
       </div>
 
       {loading ? <p>Loading events...</p> : <EventShowcase events={events} />}
+
+      {selectedEvent && (
+        <EventDetailsModal
+          event={selectedEvent}
+          onClose={() => setSelectedEvent(null)}
+        />
+      )}
     </div>
   );
 };
